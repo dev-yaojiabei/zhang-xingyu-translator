@@ -181,13 +181,17 @@ declare
   identity_name text := private.token_identity(p_token);
   clean_body text := left(trim(coalesce(p_body, '')), 1000);
   should_reply boolean;
+  reply text;
 begin
   if identity_name is null then return jsonb_build_object('ok', false, 'error', '登录已过期。'); end if;
   if clean_body = '' then return jsonb_build_object('ok', false, 'error', '你倒是说点什么。'); end if;
   insert into public.messages(sender, body) values (identity_name, clean_body);
   -- 每条真人消息都让欠欠接话。
   should_reply := true;
-  return jsonb_build_object('ok', true, 'askQian', should_reply);
+  foreach reply in array private.qian_replies(clean_body, identity_name) loop
+    insert into public.messages(sender, body) values ('欠欠', reply);
+  end loop;
+  return jsonb_build_object('ok', true, 'askQian', false);
 end;
 $$;
 
