@@ -114,30 +114,45 @@ begin
 end;
 $$;
 
-create or replace function private.qian_reply(p_body text, p_sender text)
-returns text language plpgsql volatile
+create or replace function private.qian_replies(p_body text, p_sender text)
+returns text[] language plpgsql volatile
 set search_path = public
 as $$
 declare
   body text := trim(p_body);
-  choices text[];
+  choices jsonb;
+  chosen jsonb;
+  picked text[];
 begin
-  if body ~* '(在吗|干嘛|人呢)' then
-    choices := array['在。你一叫我就冒头，够给面子吧。','在呢。刚才没说话，是想看看你还能憋出什么。','听见了，别连喊，我又没欠你两条命。'];
+  if body ~ '(谁是欠欠|欠欠是谁)' then
+    return array['我。', '刚来的？先报个名。'];
+  elsif body ~ '(哈喽|你好|嗨|hello|Hello)' then
+    if p_sender = '姚' then return array['哟，今天这么客气。', '兴呢，没跟来？']; end if;
+    return array['哈喽。', '你哪位？'];
+  elsif body ~ '(兴|张兴宇).*(睡了|睡啦|睡着|睡觉)' then
+    return array['这么早？那我现在说他坏话，他也看不见。', '……算了，明天他会翻记录。'];
+  elsif body ~ '(你们|怎么|咋).*(不说话|没说话|没声|不理我)' then
+    return array['兴不是睡了吗。', '其他人估计在潜水。', '现在就我理你，感动不？'];
+  elsif body ~* '(在吗|干嘛|人呢)' then
+    choices := jsonb_build_array(jsonb_build_array('在。','喊这么大声干嘛。'), jsonb_build_array('在呢。','刚准备装没看见。'), jsonb_build_array('干嘛？','先说好，借钱没有。'));
   elsif body ~ '(喜欢|爱不爱|想我)' then
-    choices := array['这个问题你问得挺会挑事。换个问法，我还能装没听懂。','先别急着要答案，你现在这个语气已经很有答案了。','啧，这种话当着兴的面问，你是真不怕现场升温。'];
+    choices := jsonb_build_array(jsonb_build_array('问这个干嘛。','兴还在房间里呢。'), jsonb_build_array('有一点吧。','别截图，我会不认。'), jsonb_build_array('你先问兴。','我排他后面，省得他又翻。'));
   elsif body ~ '(怎么办|咋办|怎么弄)' then
-    choices := array['先别演世界末日。把最麻烦的那一步拎出来，剩下的我陪你嘴硬。','你先做，做歪了再怪我，流程很完整。','办法有，就是你得先停止用三个字把活全塞给我。'];
+    choices := jsonb_build_array(jsonb_build_array('你先把事情说完整。','三个字就想让我接管人生啊？'), jsonb_build_array('先做最急的那个。','做歪了再回来怪我。'), jsonb_build_array('我哪知道。','但我可以先陪你骂两句。'));
   elsif body ~ '[?？]' then
-    choices := array['你这个问题听着像提问，实际像在等人顺着你。','能回答，但我建议兴先交卷，我想看看他怎么编。','问得很好。下次尽量问个我不用猜前情的。'];
+    choices := jsonb_build_array(jsonb_build_array('不知道。','你再说具体点。'), jsonb_build_array('你先说你想听哪个答案。'), jsonb_build_array('等下。','这题应该先让兴答。'));
   elsif p_sender = '兴' then
-    choices := array['兴，先把语气收一收，你现在很像占理失败后开始加音量。','这句我替姚记下了。你之后想撤回，得排队。','你继续说，我不拦你。我只是负责让姚看得更清楚一点。'];
+    choices := jsonb_build_array(jsonb_build_array('兴，你先别急。','急了就更像心虚。'), jsonb_build_array('行，我记住了。','等姚上线我原样复述。'), jsonb_build_array('你继续。','我看你还能嘴硬多久。'));
   elsif p_sender = '姚' then
-    choices := array['听见了。你继续，我看看兴这次能坚持几秒不接话。','你这句看着随口，后劲倒挺足。','行，这句我接到了。别人有没有接到，我就不点名了。'];
+    choices := jsonb_build_array(jsonb_build_array('嗯？','然后呢。'), jsonb_build_array('行。','这次先站你这边。'), jsonb_build_array('你接着说。','我在听。'), jsonb_build_array('可以。','但兴看见估计又要说我偏心。'));
   else
-    choices := array['可以，房间里又多了一个不嫌事大的人。','这句先放桌上，等当事人自己来认领。','你挺会挑时候开口。再说一句，我判断一下站哪边。'];
+    choices := jsonb_build_array(jsonb_build_array('我，欠欠。','你叫什么？'), jsonb_build_array('看见了。','继续。'), jsonb_build_array('你先说。','我暂时不打断。'));
   end if;
-  return choices[1 + floor(random() * array_length(choices, 1))::int];
+  chosen := choices -> floor(random() * jsonb_array_length(choices))::int;
+  select array_agg(value order by ordinality) into picked
+  from jsonb_array_elements_text(chosen) with ordinality;
+  if random() < 0.38 and array_length(picked, 1) > 1 then return array[picked[1]]; end if;
+  return picked;
 end;
 $$;
 
@@ -171,9 +186,22 @@ begin
   if clean_body = '' then return jsonb_build_object('ok', false, 'error', '你倒是说点什么。'); end if;
   insert into public.messages(sender, body) values (identity_name, clean_body);
   should_reply := clean_body ~ '(欠欠|欠嘴机器|@欠)' or clean_body ~ '[?？]' or random() < 0.34;
-  if should_reply then
-    insert into public.messages(sender, body) values ('欠欠', private.qian_reply(clean_body, identity_name));
-  end if;
+  return jsonb_build_object('ok', true, 'askQian', should_reply);
+end;
+$$;
+
+create or replace function public.room_qian_fallback(p_token text, p_body text)
+returns jsonb language plpgsql security definer
+set search_path = public, private
+as $$
+declare
+  identity_name text := private.token_identity(p_token);
+  reply text;
+begin
+  if identity_name is null then return jsonb_build_object('ok', false); end if;
+  foreach reply in array private.qian_replies(left(trim(coalesce(p_body, '')), 1000), identity_name) loop
+    insert into public.messages(sender, body) values ('欠欠', reply);
+  end loop;
   return jsonb_build_object('ok', true);
 end;
 $$;
@@ -181,8 +209,10 @@ $$;
 revoke all on function public.room_login(text, text) from public;
 revoke all on function public.room_state(text) from public;
 revoke all on function public.room_send(text, text) from public;
+revoke all on function public.room_qian_fallback(text, text) from public;
 grant execute on function public.room_login(text, text) to anon, authenticated;
 grant execute on function public.room_state(text) to anon, authenticated;
 grant execute on function public.room_send(text, text) to anon, authenticated;
+grant execute on function public.room_qian_fallback(text, text) to anon, authenticated;
 
 -- Password hashes and the signing secret are configured separately in the dashboard.
