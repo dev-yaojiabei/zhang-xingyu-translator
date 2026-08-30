@@ -1,0 +1,1 @@
+CREATE INDEX `idx_messages_created_at` ON `messages` (`created_at`,`id`);
