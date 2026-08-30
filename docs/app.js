@@ -83,13 +83,35 @@ async function send(event) {
   draft = "";
   input.value = "";
   input.blur();
-  try { await rpc("room_send", { p_token: token, p_body: body }); await load(); }
+  try {
+    const sent = await rpc("room_send", { p_token: token, p_body: body });
+    await load();
+    if (sent.askQian) askQian(body);
+  }
   catch {
     draft = body;
     input.value = body;
     const notice = document.querySelector(".notice");
     if (notice) notice.textContent = "刚才没发出去，再点一次。";
   }
+}
+
+async function askQian(body) {
+  const notice = document.querySelector(".notice");
+  if (notice) notice.textContent = "欠欠正在打字…";
+  try {
+    const response = await fetch(`${config.supabaseUrl}/functions/v1/qian`, {
+      method: "POST",
+      headers: { "content-type": "application/json", apikey: config.anonKey, authorization: `Bearer ${config.anonKey}` },
+      body: JSON.stringify({ token, body })
+    });
+    if (!response.ok) throw new Error("qian unavailable");
+  } catch {
+    await rpc("room_qian_fallback", { p_token: token, p_body: body });
+  }
+  await load();
+  const currentNotice = document.querySelector(".notice");
+  if (currentNotice) currentNotice.textContent = "密码决定身份 · 消息每两秒同步 · 欠欠一直在";
 }
 
 if (!config?.supabaseUrl || config.supabaseUrl.startsWith("__")) app.innerHTML = '<div class="checking">聊天室还差最后一根网线。</div>';
