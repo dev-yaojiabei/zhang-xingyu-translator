@@ -99,15 +99,20 @@ async function send(event) {
 async function askQian(body) {
   const notice = document.querySelector(".notice");
   if (notice) notice.textContent = "欠欠正在打字…";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
   try {
     const response = await fetch(`${config.supabaseUrl}/functions/v1/qian`, {
       method: "POST",
       headers: { "content-type": "application/json", apikey: config.anonKey, authorization: `Bearer ${config.anonKey}` },
-      body: JSON.stringify({ token, body })
+      body: JSON.stringify({ token, body }),
+      signal: controller.signal
     });
     if (!response.ok) throw new Error("qian unavailable");
   } catch {
     await rpc("room_qian_fallback", { p_token: token, p_body: body });
+  } finally {
+    clearTimeout(timeout);
   }
   await load();
   const currentNotice = document.querySelector(".notice");
