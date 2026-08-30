@@ -185,7 +185,8 @@ begin
   if identity_name is null then return jsonb_build_object('ok', false, 'error', '登录已过期。'); end if;
   if clean_body = '' then return jsonb_build_object('ok', false, 'error', '你倒是说点什么。'); end if;
   insert into public.messages(sender, body) values (identity_name, clean_body);
-  should_reply := clean_body ~ '(欠欠|欠嘴机器|@欠)' or clean_body ~ '[?？]' or random() < 0.34;
+  -- 欠欠是房间成员，不必点名才开口；仍留一点沉默，避免每句都抢话。
+  should_reply := clean_body ~ '(欠欠|欠嘴机器|@欠)' or clean_body ~ '[?？]' or random() < 0.75;
   return jsonb_build_object('ok', true, 'askQian', should_reply);
 end;
 $$;
