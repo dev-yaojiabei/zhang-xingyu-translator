@@ -17,7 +17,7 @@ function botAnswer(text: string, sender: string, recent: Array<{ sender: string;
   const talkingToYao = sender === "姚";
   const talkingToXing = sender === "兴";
   const addressedToQianqian = /欠欠|欠嘴机器|@欠/.test(text);
-  const lastHuman = recent.find((message) => message.sender !== "欠嘴机器");
+  const lastHuman = recent.find((message) => message.sender !== "欠欠");
   if (/没生气|没翻/.test(text)) return pick([
     talkingToXing ? "你没生气，你只是每个字都在摔门。" : "嗯，没生气。只是标点符号突然长牙了。",
     talkingToXing ? "行，没翻。那你这语气可能只是从楼梯上滚下来了。" : "我信。反正嘴硬又不用交税。",
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
   await db.insert(messages).values({ sender, body });
   const addressedToQianqian = /欠欠|欠嘴机器|@欠/.test(body);
   if (addressedToQianqian || Math.random() < 0.55 || /没生气|没翻|我的|宝宝|闭嘴|滚|想你|哈哈|在干嘛|晚安|睡|吃饭|饿|对不起|错了|生气|烦|^(嗯+|哦+|行吧?|好吧?|不知道|随便)/.test(body)) {
-    await db.insert(messages).values({ sender: "欠嘴机器", body: botAnswer(body, sender, recent) });
+    await db.insert(messages).values({ sender: "欠欠", body: botAnswer(body, sender, recent) });
   }
   return Response.json({ ok: true }, { status: 201 });
 }

@@ -1,7 +1,7 @@
 import { roleForPassword, roleForRequest, sessionCookie } from "../_auth";
 import { env } from "cloudflare:workers";
 
-const reservedNames = new Set(["姚", "兴", "访客", "欠嘴机器"]);
+const reservedNames = new Set(["姚", "兴", "访客", "欠欠"]);
 
 async function registerParticipant(name: string) {
   const d1 = (env as typeof env & { DB: D1Database }).DB;
