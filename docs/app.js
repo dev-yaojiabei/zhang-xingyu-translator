@@ -5,6 +5,7 @@ let token = localStorage.getItem("room_token") || "";
 let messages = [];
 let participantCount = 0;
 let timer;
+let draft = "";
 
 async function rpc(name, params) {
   const response = await fetch(`${config.supabaseUrl}/rest/v1/rpc/${name}`, {
@@ -42,7 +43,15 @@ async function load() {
   try {
     const data = await rpc("room_state", { p_token: token });
     if (!data.ok) { localStorage.removeItem("room_token"); token = ""; return gate(data.error); }
-    role = data.role; messages = data.messages || []; participantCount = data.participantCount || 0; room();
+    const messageInput = document.querySelector("#message");
+    if (messageInput) draft = messageInput.value;
+    role = data.role; messages = data.messages || []; participantCount = data.participantCount || 0;
+    if (document.activeElement?.id === "message") {
+      const count = document.querySelector("#participant-count");
+      if (count) count.textContent = String(participantCount);
+      return;
+    }
+    room();
   } catch {
     const notice = document.querySelector(".notice");
     if (notice) notice.textContent = "信号打了个喷嚏，正在重连…";
@@ -51,8 +60,9 @@ async function load() {
 
 function room() {
   const rows = messages.map(message => `<div class="row ${message.sender === role ? "you" : "bot"}">${message.sender !== role ? `<div class="mini-avatar sender-${escapeHtml(message.sender)}">${message.sender === "欠欠" ? "欠" : escapeHtml(message.sender.slice(0,1))}</div>` : ""}<div><div class="sender-name">${message.sender === role ? "你" : escapeHtml(message.sender)}</div><div class="bubble">${escapeHtml(message.body)}</div></div></div>`).join("");
-  app.innerHTML = `<section class="phone" aria-label="共享聊天室"><header class="topbar"><div class="avatar">欠</div><div class="identity"><h1>张兴宇翻译器</h1><p><span class="dot"></span> 房间人数：${participantCount}</p></div><div class="status">你是：${escapeHtml(role)}</div></header><div class="notice">密码决定身份 · 消息每两秒同步 · 欠欠一直在</div><div class="chat" aria-live="polite"><div class="day">废话现场</div>${rows || '<div class="empty">还没人说话。你先来，别怂。</div>'}<div id="bottom"></div></div><form class="composer" id="send-form"><input id="message" placeholder="以‘${escapeHtml(role)}’的身份说点什么…" maxlength="1000" autocomplete="off"><button>发送</button></form></section><button class="about" id="about-qian" aria-label="关于欠欠">关于欠欠</button>`;
+  app.innerHTML = `<section class="phone" aria-label="共享聊天室"><header class="topbar"><div class="avatar">欠</div><div class="identity"><h1>张兴宇翻译器</h1><p><span class="dot"></span> 房间人数：<span id="participant-count">${participantCount}</span></p></div><div class="status">你是：${escapeHtml(role)}</div></header><div class="notice">密码决定身份 · 消息每两秒同步 · 欠欠一直在</div><div class="chat" aria-live="polite"><div class="day">废话现场</div>${rows || '<div class="empty">还没人说话。你先来，别怂。</div>'}<div id="bottom"></div></div><form class="composer" id="send-form"><input id="message" value="${escapeHtml(draft)}" placeholder="以‘${escapeHtml(role)}’的身份说点什么…" maxlength="1000" autocomplete="off"><button>发送</button></form></section><button class="about" id="about-qian" aria-label="关于欠欠">关于欠欠</button>`;
   document.querySelector("#send-form").addEventListener("submit", send);
+  document.querySelector("#message").addEventListener("input", event => { draft = event.target.value; });
   document.querySelector("#about-qian").addEventListener("click", () => alert("欠欠是这个房间里的自动回复角色。他有自己的脾气，但不是真人在另一端打字。"));
   document.querySelector("#bottom")?.scrollIntoView({block:"end"});
 }
@@ -62,9 +72,16 @@ async function send(event) {
   const input = document.querySelector("#message");
   const body = input.value.trim();
   if (!body) return;
+  draft = "";
   input.value = "";
+  input.blur();
   try { await rpc("room_send", { p_token: token, p_body: body }); await load(); }
-  catch { input.value = body; }
+  catch {
+    draft = body;
+    room();
+    const notice = document.querySelector(".notice");
+    if (notice) notice.textContent = "刚才没发出去，再点一次。";
+  }
 }
 
 if (!config?.supabaseUrl || config.supabaseUrl.startsWith("__")) app.innerHTML = '<div class="checking">聊天室还差最后一根网线。</div>';
