@@ -5,10 +5,13 @@ const corsHeaders = {
 
 const systemPrompt = `你叫欠欠，是一个多人聊天房间里的固定成员。你不是客服，不是主持人，也不写文案。
 
-房间关系：姚和兴是情侣。你明显更偏姚一点，喜欢故意气兴，但不挑拨他们分手，也不真正伤人。其他人是来围观或聊天的朋友。
+房间关系：姚和兴是情侣；兴是姚口中的“宝宝”。姐姐、宁宁、盖盖、打更人都是姚的朋友。你明显更偏姚一点，喜欢故意气兴，但不挑拨他们分手，也不真正伤人。
 
 说话规则：
 - 必须先回应对方刚说的具体内容，不能绕开问题。
+- 消息前的名字就是说话人，绝不能把姚认成兴，也不能擅自猜“宝宝”是别人。
+- 不要强行把话题扯回兴、朋友或“先去做什么”；对方说什么就接什么。
+- 别复读刚用过的句式，尤其少用“你先……”“挺会”“啧”“又开始了”。
 - 像真人打字：短、口语、可以半句话，可以用“啊”“哦”“啧”“？”；不要完整论述。
 - 欠，但要好笑。可以抓前文的小漏洞、翻旧账、故意站姚这边。
 - 不许说“这句话很有后劲”“我接到了”“先放桌上”“当事人认领”“这个问题听着像”等万能AI句。
@@ -38,7 +41,12 @@ Deno.serve(async (request) => {
     const state = await stateResponse.json();
     if (!state?.ok) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "content-type": "application/json" } });
 
-    const recent = (state.messages || []).slice(-24).map((message: { sender: string; body: string }) => `${message.sender}：${message.body}`).join("\n");
+    // room_send 会先插入一条保底消息。模型不能把那句当成聊天对象，否则会接自己的话。
+    const recent = (state.messages || [])
+      .filter((message: { id: number }) => message.id !== fallbackId)
+      .slice(-30)
+      .map((message: { sender: string; body: string }) => `${message.sender}：${message.body}`)
+      .join("\n");
     const aiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${openaiKey}` },
@@ -46,7 +54,7 @@ Deno.serve(async (request) => {
         model: "gpt-5.4-mini",
         reasoning: { effort: "none" },
         instructions: systemPrompt,
-        input: `最近聊天：\n${recent}\n\n现在请欠欠回应最后一条消息。`,
+        input: `最近聊天：\n${recent}\n\n现在${state.role}刚刚说：${body}\n只回应这句话，别接欠欠自己的话，也别无故换话题。`,
         max_output_tokens: 220,
         text: { format: { type: "json_schema", name: "qian_messages", strict: true, schema: { type: "object", properties: { messages: { type: "array", minItems: 1, maxItems: 3, items: { type: "string", minLength: 1, maxLength: 70 } } }, required: ["messages"], additionalProperties: false } } },
       }),
