@@ -86,7 +86,7 @@ async function send(event) {
   try {
     const sent = await rpc("room_send", { p_token: token, p_body: body });
     await load();
-    if (sent.askQian) askQian(body);
+    if (sent.askQian) askQian(body, sent.fallbackId);
   }
   catch {
     draft = body;
@@ -96,7 +96,7 @@ async function send(event) {
   }
 }
 
-async function askQian(body) {
+async function askQian(body, fallbackId) {
   const notice = document.querySelector(".notice");
   if (notice) notice.textContent = "欠欠正在打字…";
   const controller = new AbortController();
@@ -105,12 +105,12 @@ async function askQian(body) {
     const response = await fetch(`${config.supabaseUrl}/functions/v1/qian`, {
       method: "POST",
       headers: { "content-type": "application/json", apikey: config.anonKey, authorization: `Bearer ${config.anonKey}` },
-      body: JSON.stringify({ token, body }),
+      body: JSON.stringify({ token, body, fallbackId }),
       signal: controller.signal
     });
     if (!response.ok) throw new Error("qian unavailable");
   } catch {
-    await rpc("room_qian_fallback", { p_token: token, p_body: body });
+    // room_send 已经放了保底消息；智能回复失败时保留它即可。
   } finally {
     clearTimeout(timeout);
   }
