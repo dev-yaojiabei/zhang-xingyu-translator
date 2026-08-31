@@ -22,8 +22,8 @@ const systemPrompt = `你叫欠欠，是一个多人聊天房间里的固定成�
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const { token, body } = await request.json();
-    if (!token || !body) throw new Error("missing input");
+    const { token, body, fallbackId } = await request.json();
+    if (!token || !body || !Number.isInteger(fallbackId)) throw new Error("missing input");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -57,14 +57,23 @@ Deno.serve(async (request) => {
     const replies = JSON.parse(outputText || "{}").messages?.filter((item: unknown) => typeof item === "string" && item.trim()).slice(0, 3);
     if (!replies?.length) throw new Error("empty response");
 
-    const rows = replies.map((reply: string) => ({ sender: "欠欠", body: reply.trim() }));
-    const insertResponse = await fetch(`${supabaseUrl}/rest/v1/messages`, {
-      method: "POST",
+    const replaceResponse = await fetch(`${supabaseUrl}/rest/v1/messages?id=eq.${fallbackId}&sender=eq.%E6%AC%A0%E6%AC%A0`, {
+      method: "PATCH",
       headers: { "content-type": "application/json", apikey: serviceKey, authorization: `Bearer ${serviceKey}`, prefer: "return=minimal" },
-      body: JSON.stringify(rows),
+      body: JSON.stringify({ body: replies[0].trim() }),
     });
-    if (!insertResponse.ok) throw new Error("insert failed");
-    return new Response(JSON.stringify({ ok: true, count: rows.length }), { headers: { ...corsHeaders, "content-type": "application/json" } });
+    if (!replaceResponse.ok) throw new Error("replace failed");
+
+    const extraRows = replies.slice(1).map((reply: string) => ({ sender: "欠欠", body: reply.trim() }));
+    if (extraRows.length) {
+      const insertResponse = await fetch(`${supabaseUrl}/rest/v1/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json", apikey: serviceKey, authorization: `Bearer ${serviceKey}`, prefer: "return=minimal" },
+        body: JSON.stringify(extraRows),
+      });
+      if (!insertResponse.ok) throw new Error("insert failed");
+    }
+    return new Response(JSON.stringify({ ok: true, count: replies.length }), { headers: { ...corsHeaders, "content-type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "failed" }), { status: 500, headers: { ...corsHeaders, "content-type": "application/json" } });
   }
