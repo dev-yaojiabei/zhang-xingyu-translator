@@ -180,18 +180,16 @@ as $$
 declare
   identity_name text := private.token_identity(p_token);
   clean_body text := left(trim(coalesce(p_body, '')), 1000);
-  should_reply boolean;
-  reply text;
+  fallback_reply text;
+  fallback_id bigint;
 begin
   if identity_name is null then return jsonb_build_object('ok', false, 'error', '登录已过期。'); end if;
   if clean_body = '' then return jsonb_build_object('ok', false, 'error', '你倒是说点什么。'); end if;
   insert into public.messages(sender, body) values (identity_name, clean_body);
-  -- 每条真人消息都让欠欠接话。
-  should_reply := true;
-  foreach reply in array private.qian_replies(clean_body, identity_name) loop
-    insert into public.messages(sender, body) values ('欠欠', reply);
-  end loop;
-  return jsonb_build_object('ok', true, 'askQian', false);
+  -- 先放一条即时保底，智能回复成功后会原地替换它，避免装死或重复刷屏。
+  fallback_reply := (private.qian_replies(clean_body, identity_name))[1];
+  insert into public.messages(sender, body) values ('欠欠', fallback_reply) returning id into fallback_id;
+  return jsonb_build_object('ok', true, 'askQian', true, 'fallbackId', fallback_id);
 end;
 $$;
 
